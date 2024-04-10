@@ -1,0 +1,101 @@
+#include <opencv2/opencv.hpp>
+#include <opencv2/features2d.hpp>
+#include "Timer.h"
+
+using namespace cv;
+using namespace std;
+int main(int argc, char* argv[]) {
+
+	Timer myTimer;
+
+	//read image
+	cv::Mat image1 = cv::imread("image1.jpg");
+
+	//create sift pointer and use it to detect features
+	Ptr<SIFT> sift = SIFT::create();
+	std::vector<cv::KeyPoint> keypoints1;
+	cv::Mat descriptors1;
+	sift->detectAndCompute(image1, cv::noArray(), keypoints1, descriptors1);
+	std::cout << "Found " << keypoints1.size() << " features" << std::endl;
+
+	cv::Mat image2 = cv::imread("image2.jpg");
+
+	//use the sift pointer to detect features
+	std::vector<cv::KeyPoint> keypoints2;
+	cv::Mat descriptors2;
+	sift->detectAndCompute(image2, cv::noArray(), keypoints2, descriptors2);
+	std::cout << "Found " << keypoints2.size() << " features" << std::endl;
+
+
+	if (image1.empty()) {
+		std::cerr << "Could not load image from image1.jpg" << std::endl;
+		return -1;
+	}
+	if (image2.empty()) {
+		std::cerr << "Could not load image from image2.jpg" << std::endl;
+		return -1;
+	}
+
+	//creating Mats to hold the two images with features overlayed side by side
+	cv::Mat kptImage1;
+	cv::drawKeypoints(image1, keypoints1, kptImage1, cv::Scalar(0, 255, 0),
+		cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+
+	cv::Mat kptImage2;
+	cv::drawKeypoints(image2, keypoints2, kptImage2, cv::Scalar(0, 255, 0),
+		cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+
+	//matchers are algorithims that compare the features detected in the image
+	//brute force matcher
+	cv::Ptr<cv::DescriptorMatcher> matcher1 = cv::BFMatcher::create();
+	//better matcher algorithim
+	cv::Ptr<cv::DescriptorMatcher> matcher2 = cv::FlannBasedMatcher::create();
+
+	//reset timer to 0
+	myTimer.reset();
+
+	//create a vector to store the matches, here we have a list of 
+	std::vector<std::vector<cv::DMatch>> matches1;
+	//find matches in the features(this takes a long time)
+	//knnMatches are finding k Nearest Neighbor matches
+	matcher1->knnMatch(descriptors1, descriptors2, matches1, 2);
+
+	//read timer output
+	double elapsedTime = myTimer.read();
+	std::cout << "++++++++ That code took " << elapsedTime << " seconds +++++++" << std::endl;
+
+	//reset timer to 0
+	myTimer.reset();
+
+	std::vector<std::vector<cv::DMatch>> matches2;
+	//find matches in the features(this takes a long time)
+	//knnMatches are finding k Nearest Neighbor matches
+	matcher2->knnMatch(descriptors1, descriptors2, matches2, 2);
+
+	//read timer output
+	elapsedTime = myTimer.read();
+	std::cout << "++++++++ That code took " << elapsedTime << " seconds +++++++" << std::endl;
+
+	//choose only the matches whose matches are significatly better than the second best matches
+	std::vector<cv::DMatch> goodMatches;
+	for (const auto& match : matches2) {
+		if (match[0].distance < 0.8 * match[1].distance) {
+			goodMatches.push_back(match[0]);
+		}
+	}
+
+	//drawing the matches then displaying them
+	cv::Mat matchImg;
+	cv::drawMatches(image1, keypoints1, image2, keypoints2, goodMatches, matchImg);
+	cv::namedWindow("Matches");
+	cv::imshow("Matches", matchImg);
+
+
+	//dispay images
+	cv::namedWindow("Display 1");
+	cv::imshow("Display 1", kptImage1);
+	cv::imshow("Display 2", kptImage2);
+	cv::waitKey();
+
+	return 0;
+}
